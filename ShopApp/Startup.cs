@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ShopApp.Context;
+using ShopApp.Services;
 
 namespace ShopApp
 {
@@ -24,7 +25,8 @@ namespace ShopApp
 
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddDbContext<ShopContext>(options => options.UseSqlServer(configuration.GetConnectionString("ShopContext")));
+            services.AddTransient<PayPalService>();
+            services.AddDbContext<ShopContext>(options => options.UseNpgsql(configuration.GetConnectionString("ShopContext")));
             services.AddMvc(options => options.EnableEndpointRouting = false);
         }
 

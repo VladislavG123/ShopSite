@@ -5,106 +5,82 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using ShopApp.Context;
+using ShopApp.DTO;
 using ShopApp.Models;
+using ShopApp.Services;
 
 namespace ShopApp.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/[controller]/[action]")]
     [ApiController]
     public class BasketsController : ControllerBase
     {
-        private readonly ShopContext _context;
+        private readonly ShopContext context;
+        private readonly PayPalService payPalService;
 
-        public BasketsController(ShopContext context)
+        public BasketsController(ShopContext context, PayPalService payPalService)
         {
-            _context = context;
+            this.context = context;
+            this.payPalService = payPalService;
         }
 
-        // GET: api/Baskets
+        // GET: api/Basket
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Basket>>> GetBaskets()
+        public async Task<ActionResult> GetProductsInBasket()
         {
-            return await _context.Baskets.ToListAsync();
-        }
+            var basket = await context.Baskets.FirstOrDefaultAsync();
 
-        // GET: api/Baskets/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Basket>> GetBasket(Guid id)
-        {
-            var basket = await _context.Baskets.FindAsync(id);
+            (basket.Products as List<Product>).AddRange(await context.Products.Where(product => product.Basket.Id == basket.Id).ToListAsync());
 
-            if (basket == null)
+            var products = new List<ProductDTO>();
+
+            foreach (var item in basket.Products)
             {
-                return NotFound();
+                products.Add(new ProductDTO
+                {
+                    Cost = item.Cost,
+                    Description = item.Description,
+                    Name = item.Name
+                });
             }
 
-            return basket;
+            return Ok(products);
         }
+
 
         // PUT: api/Baskets/5
         // To protect from overposting attacks, please enable the specific properties you want to bind to, for
         // more details see https://aka.ms/RazorPagesCRUD.
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutBasket(Guid id, Basket basket)
+        [HttpGet]
+        public async Task<IActionResult> PutToBasket(string productId)
         {
-            if (id != basket.Id)
-            {
-                return BadRequest();
-            }
+            var product = (await context.Products.FirstOrDefaultAsync(x => x.Id.ToString() == productId));
 
-            _context.Entry(basket).State = EntityState.Modified;
+            if (product is null) return NoContent();
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!BasketExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+            var basket = await context.Baskets.FirstOrDefaultAsync();
 
-            return NoContent();
+            product.Basket = basket;
+
+            await context.SaveChangesAsync();
+
+            return Ok();
         }
 
-        // POST: api/Baskets
-        // To protect from overposting attacks, please enable the specific properties you want to bind to, for
-        // more details see https://aka.ms/RazorPagesCRUD.
-        [HttpPost]
-        public async Task<ActionResult<Basket>> PostBasket(Basket basket)
+        [HttpGet]
+        public async Task<string> PayBasket()
         {
-            _context.Baskets.Add(basket);
-            await _context.SaveChangesAsync();
+            var basket = await context.Baskets.FirstOrDefaultAsync();
 
-            return CreatedAtAction("GetBasket", new { id = basket.Id }, basket);
+            (basket.Products as List<Product>).AddRange(await context.Products.Where(product => product.Basket.Id == basket.Id).ToListAsync());
+
+            var url = await payPalService.CreateInvoice(basket);
+
+            return url;
         }
 
-        // DELETE: api/Baskets/5
-        [HttpDelete("{id}")]
-        public async Task<ActionResult<Basket>> DeleteBasket(Guid id)
-        {
-            var basket = await _context.Baskets.FindAsync(id);
-            if (basket == null)
-            {
-                return NotFound();
-            }
 
-            _context.Baskets.Remove(basket);
-            await _context.SaveChangesAsync();
-
-            return basket;
-        }
-
-        private bool BasketExists(Guid id)
-        {
-            return _context.Baskets.Any(e => e.Id == id);
-        }
     }
 }
